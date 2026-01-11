@@ -1,31 +1,28 @@
-# AI-Powered Network Intrusion Detection System (NIDS)
+---
+title: AI NIDS Student Project
+emoji: 🛡️
+colorFrom: blue
+colorTo: green
+sdk: streamlit
+sdk_version: 1.39.0
+app_file: app.py
+pinned: false
+---
 
+# 🛡️ AI-Based Network Intrusion Detection System (Student Project)
 
+This project demonstrates how to use **Machine Learning (Random Forest)** and **Generative AI (Grok)** to detect and explain network attacks (specifically DDoS).
 
-## 📌 Overview
-This project is an intelligent **Network Intrusion Detection System (NIDS)** that leverages Machine Learning to identify potential cyberattacks. By analyzing network traffic patterns, the system classifies connections as **Benign (Safe)** or **Malicious (Attack)** in real-time.
+## 🚀 How to Use
+1. **Enter API Key:** Paste your Grok API key in the sidebar (optional, for AI explanations).
+2. **Train Model:** Click the "Train AI Model" button. The system loads the `Friday-WorkingHours...` dataset automatically.
+3. **Simulate:** Click "Simulate Random Packet" to pick a real network packet from the test set.
+4. **Analyze:** See if the model flags it as **BENIGN** or **DDoS**, and ask Grok to explain why.
 
-The application features a web-based dashboard for security analysts to train models, evaluate performance metrics, and simulate live traffic scenarios.
+## 📂 Files
+- `app.py`: The main Python application code.
+- `requirements.txt`: List of libraries used.
+- `Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv`: The dataset (CIC-IDS2017 subset).
 
-## 🚀 Key Features
-* **Machine Learning Core:** Uses the **Random Forest Classifier** for robust and accurate traffic classification.
-* **Interactive UI:** Built with **Streamlit** for a seamless, browser-based user experience.
-* **Real-time Metrics:** Displays Accuracy, Total Samples, and a **Confusion Matrix** to visualize model reliability.
-* **Live Simulator:** Allows users to manually input packet parameters (Flow Duration, Packet Count, etc.) to test the AI's detection logic.
-* **Flexible Data Handling:** Supports both synthetic data simulation and the **CIC-IDS2017** benchmark dataset.
-
-## 🛠️ Tech Stack
-* **Language:** Python 3.12+
-* **Libraries:** * `scikit-learn` (Machine Learning)
-    * `pandas` & `numpy` (Data Processing)
-    * `streamlit` (Dashboard Framework)
-    * `seaborn` & `matplotlib` (Data Visualization)
-
-## 📁 Project Structure
-```text
-AI_NIDS_Project/
-├── nids_main.py         # Main application and UI logic
-├── requirements.txt     # Project dependencies
-└── README.md            # Project documentation
-
-
+## 🎓 About
+Created for a university cybersecurity project to demonstrate the integration of traditional ML and LLMs in security operations.
