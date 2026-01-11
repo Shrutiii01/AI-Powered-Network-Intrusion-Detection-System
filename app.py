@@ -1,163 +1,151 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
-
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score
+from groq import Groq
+import os
 
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-
-st.set_page_config(
-    page_title="AI-Powered NIDS",
-    layout="wide"
-)
+# --- PAGE SETUP ---
+st.set_page_config(page_title="AI-NIDS Student Project", layout="wide")
 
 st.title("AI-Based Network Intrusion Detection System")
 st.markdown("""
-This system uses **Machine Learning (Random Forest Algorithm)**  
-to detect **malicious network traffic** in real time.
-
-**Classes**
-- 0 → Benign (Normal Traffic)
-- 1 → Malicious (Attack Traffic)
+**Student Project**: This system uses **Random Forest** to detect Network attacks and **Groq AI** to explain the packets.
 """)
 
+# --- CONFIGURATION ---
+DATA_FILE = "Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv"
+
+# --- SIDEBAR: SETTINGS ---
+st.sidebar.header("1. Settings")
+groq_api_key = st.sidebar.text_input("Groq API Key (starts with gsk_)", type="password")
+st.sidebar.caption("[Get a free key here](https://console.groq.com/keys)")
+
+st.sidebar.header("2. Model Training")
 
 @st.cache_data
-def load_data():
-    """
-    Generates synthetic network traffic data.
-    This simulates CIC-IDS2017-like behavior.
-    """
+def load_data(filepath):
+    try:
+        df = pd.read_csv(filepath, nrows=15000)
+        df.columns = df.columns.str.strip()
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        df.dropna(inplace=True)
+        return df
+    except FileNotFoundError:
+        return None
 
-    np.random.seed(42)
-    n_samples = 5000
-
-    data = {
-        "Destination_Port": np.random.randint(1, 65535, n_samples),
-        "Flow_Duration": np.random.randint(10, 100000, n_samples),
-        "Total_Fwd_Packets": np.random.randint(1, 100, n_samples),
-        "Packet_Length_Mean": np.random.uniform(40, 1500, n_samples),
-        "Active_Mean": np.random.uniform(1, 1000, n_samples),
-        "Label": np.random.choice([0, 1], size=n_samples, p=[0.7, 0.3])
-    }
-
-    df = pd.DataFrame(data)
-
+def train_model(df):
+    features = ['Flow Duration', 'Total Fwd Packets', 'Total Backward Packets', 
+                'Total Length of Fwd Packets', 'Fwd Packet Length Max', 
+                'Flow IAT Mean', 'Flow IAT Std', 'Flow Packets/s']
+    target = 'Label'
     
-    attack_idx = df["Label"] == 1
-    df.loc[attack_idx, "Total_Fwd_Packets"] += np.random.randint(50, 200, attack_idx.sum())
-    df.loc[attack_idx, "Flow_Duration"] = np.random.randint(1, 1000, attack_idx.sum())
+    missing_cols = [c for c in features if c not in df.columns]
+    if missing_cols:
+        st.error(f"Missing columns in CSV: {missing_cols}")
+        return None, 0, [], None, None
 
-    return df
+    X = df[features]
+    y = df[target]
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    
+    clf = RandomForestClassifier(n_estimators=10, max_depth=10, random_state=42)
+    clf.fit(X_train, y_train)
+    
+    score = accuracy_score(y_test, clf.predict(X_test))
+    return clf, score, features, X_test, y_test
 
+# --- APP LOGIC ---
+df = load_data(DATA_FILE)
 
-df = load_data()
+if df is None:
+    st.error(f"Error: File '{DATA_FILE}' not found. Please upload it to the Files tab.")
+    st.stop()
 
+st.sidebar.success(f"Dataset Loaded: {len(df)} rows")
 
-st.sidebar.header("Model Controls")
+if st.sidebar.button("Train Model Now"):
+    with st.spinner("Training model..."):
+        clf, accuracy, feature_names, X_test, y_test = train_model(df)
+        if clf:
+            st.session_state['model'] = clf
+            st.session_state['features'] = feature_names
+            st.session_state['X_test'] = X_test 
+            st.session_state['y_test'] = y_test
+            st.sidebar.success(f"Training Complete! Accuracy: {accuracy:.2%}")
 
-train_size = st.sidebar.slider(
-    "Training Data Percentage",
-    min_value=50,
-    max_value=90,
-    value=80
-)
+st.header("3. Threat Analysis Dashboard")
 
-n_estimators = st.sidebar.slider(
-    "Number of Trees (Random Forest)",
-    min_value=10,
-    max_value=200,
-    value=100
-)
+if 'model' in st.session_state:
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Simulation")
+        st.info("Pick a random packet from the test data to simulate live traffic.")
+        
+        if st.button("🎲 Capture Random Packet"):
+            random_idx = np.random.randint(0, len(st.session_state['X_test']))
+            packet_data = st.session_state['X_test'].iloc[random_idx]
+            actual_label = st.session_state['y_test'].iloc[random_idx]
+            
+            st.session_state['current_packet'] = packet_data
+            st.session_state['actual_label'] = actual_label
+            
+    if 'current_packet' in st.session_state:
+        packet = st.session_state['current_packet']
+        
+        with col1:
+            st.write("**Packet Header Info:**")
+            st.dataframe(packet, use_container_width=True)
 
+        with col2:
+            st.subheader("AI Detection Result")
+            prediction = st.session_state['model'].predict([packet])[0]
+            
+            if prediction == "BENIGN":
+                st.success(f" STATUS: **SAFE (BENIGN)**")
+            else:
+                st.error(f"🚨 STATUS: **ATTACK DETECTED ({prediction})**")
+            
+            st.caption(f"Ground Truth Label: {st.session_state['actual_label']}")
 
-X = df.drop("Label", axis=1)
-y = df["Label"]
+            st.markdown("---")
+            st.subheader(" Ask AI Analyst (Groq)")
+            
+            if st.button("Generate Explanation"):
+                if not groq_api_key:
+                    st.warning(" Please enter your Groq API Key in the sidebar first.")
+                else:
+                    try:
+                        client = Groq(api_key=groq_api_key)
+                        
+                        prompt = f"""
+                        You are a cybersecurity analyst. 
+                        A network packet was detected as: {prediction}.
+                        
+                        Packet Technical Details:
+                        {packet.to_string()}
+                        
+                        Please explain:
+                        1. Why these specific values (like Flow Duration or Packet Length) might indicate {prediction}.
+                        2. If it is BENIGN, explain why it looks normal.
+                        3. Keep the answer short and simple for a student.
+                        """
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X,
-    y,
-    test_size=(100 - train_size) / 100,
-    random_state=42
-)
-
-
-st.divider()
-st.subheader("1. Model Training")
-
-if st.button("Train Model"):
-    with st.spinner("Training Random Forest Model..."):
-        model = RandomForestClassifier(
-            n_estimators=n_estimators,
-            random_state=42
-        )
-        model.fit(X_train, y_train)
-        st.session_state["model"] = model
-        st.success("Model trained successfully.")
-
-
-st.divider()
-st.subheader("2. Model Evaluation")
-
-if "model" in st.session_state:
-    model = st.session_state["model"]
-    y_pred = model.predict(X_test)
-
-    acc = accuracy_score(y_test, y_pred)
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Accuracy", f"{acc * 100:.2f}%")
-    c2.metric("Total Records", len(df))
-    c3.metric("Detected Attacks", int(y_pred.sum()))
-
-    st.markdown("### Confusion Matrix")
-    cm = confusion_matrix(y_test, y_pred)
-
-    fig, ax = plt.subplots(figsize=(4, 3))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Reds", ax=ax)
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("Actual")
-    st.pyplot(fig)
-
+                        with st.spinner("Groq is analyzing the packet..."):
+                            completion = client.chat.completions.create(
+                                model="llama-3.3-70b-versatile",  # <--- UPDATED MODEL NAME
+                                messages=[
+                                    {"role": "user", "content": prompt}
+                                ],
+                                temperature=0.6,
+                            )
+                            st.info(completion.choices[0].message.content)
+                            
+                    except Exception as e:
+                        st.error(f"API Error: {e}")
 else:
-    st.warning("Train the model to see evaluation results.")
-
-
-st.divider()
-st.subheader("3. Live Traffic Analyzer")
-
-st.markdown("Enter packet details to test whether traffic is malicious.")
-
-col1, col2, col3, col4 = st.columns(4)
-
-flow_duration = col1.number_input("Flow Duration", 0, 100000, 500)
-total_packets = col2.number_input("Total Packets", 0, 500, 120)
-packet_length = col3.number_input("Packet Length Mean", 0, 1500, 600)
-active_mean = col4.number_input("Active Mean Time", 0, 1000, 100)
-
-if st.button("Analyze Traffic"):
-    if "model" not in st.session_state:
-        st.error("Train the model first.")
-    else:
-        model = st.session_state["model"]
-
-        input_data = np.array([[
-            80,  # Destination Port (constant for demo)
-            flow_duration,
-            total_packets,
-            packet_length,
-            active_mean
-        ]])
-
-        prediction = model.predict(input_data)[0]
-
-        if prediction == 1:
-            st.error("🚨 MALICIOUS TRAFFIC DETECTED")
-            st.write("Reason: High packet activity with abnormal duration.")
-        else:
-            st.success("✅ BENIGN TRAFFIC (Safe)")
+    st.info(" Waiting for model training. Click **'Train Model Now'** in the sidebar.")
